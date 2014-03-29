@@ -4,7 +4,20 @@ Changelog AFWall+
 -------------
 Download links are right here on the ["Downloads" front page](https://github.com/ukanth/afwall/downloads).
 
-Version 1.2.9-Final Beta
+Version 1.3.0
+
+* New Widget with support for multiple profiles (single widget)
+* Updated lockpattern - stealth mode/max retry count
+* DNS Proxy to Preferences (By default UDP 53 will be blocked on <4.3)
+* More Log information (PORT/PROTOCOL)
+* Fixed application list load performance issues
+* Fixed bug in preferences
+* Support for Wifi-only tab (auto hide data column)
+* Block packet notification (exp!) - Log service
+* New Icon,User reported bug fixes including tasker plugin
+* Translations updated - Indonesian (thx mirulumam)
+
+Version 1.2.9
 
 * Feature: Column level select/invert/unselect
 * Feature: New Import/Export (with backward compatiblity)

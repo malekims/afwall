@@ -27,8 +27,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     package="dev.ukanth.ufirewall"
-    android:versionCode="152"
-    android:versionName="1.2.9" >
+    android:versionCode="157"
+    android:versionName="1.3.0" >
 
     <!-- Android 2.2 up to 4.x -->
     <uses-sdk
@@ -67,10 +67,12 @@
     <!-- Screen support -->
     <supports-screens
         android:anyDensity="true"
-        android:largeScreens="true"
+        android:smallScreens="true"
         android:normalScreens="true"
-        android:smallScreens="true" />
-
+        android:largeScreens="true"
+        android:xlargeScreens="true"
+     />
+    
     <application 
         android:hardwareAccelerated="false"
         android:icon="@drawable/icon"
@@ -148,17 +150,6 @@
                  <action android:name="android.net.wifi.WIFI_AP_STATE_CHANGED" />
             </intent-filter>
         </receiver>
-        <receiver android:name="dev.ukanth.ufirewall.StatusWidget" android:label="@string/widget_label_status">
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/onoff_widget" />
-
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-                <action android:name="dev.ukanth.ufirewall.intent.action.STATUS_CHANGED" />
-                <action android:name="dev.ukanth.ufirewall.intent.action.TOGGLE_REQUEST" />
-            </intent-filter>
-        </receiver>
         
         
          <receiver android:name="dev.ukanth.ufirewall.widget.ToggleWidget" android:label="@string/widget_label_settings">
@@ -174,9 +165,10 @@
         </receiver>
 
         <activity
-            android:name="group.pals.android.lib.ui.lockpattern.LockPatternActivity"
-            android:configChanges="orientation|screenSize|keyboard|keyboardHidden|locale"
-            android:theme="@android:style/Theme.Dialog" />
+		    android:name="com.haibison.android.lockpattern.LockPatternActivity"
+		    android:configChanges="orientation|screenSize|keyboard|keyboardHidden"
+    		android:screenOrientation="user"
+		    android:theme="@style/Alp.42447968.Theme.Dark" />
 
         <!-- device admin -->
         <!-- This is required this receiver to become device admin component. -->
@@ -201,7 +193,7 @@
             android:name="dev.ukanth.ufirewall.plugin.LocaleEdit"
             android:exported="true"
             android:icon="@drawable/icon"
-            android:label="AFWall+ Tasker Plugin"
+            android:label="@string/tasker_lable"
             android:theme="@style/Theme.Locale.Dark"
             android:uiOptions="splitActionBarWhenNarrow"
             android:windowSoftInputMode="adjustResize"
@@ -216,7 +208,6 @@
         <receiver
             android:name="dev.ukanth.ufirewall.plugin.FireReceiver"
             android:exported="true"
-            android:process=":background"
             tools:ignore="ExportedReceiver" >
             <!-- this Intent filter allows the plug-in to discovered by Locale -->
             <intent-filter>
@@ -225,6 +216,7 @@
         </receiver>
         <service android:name="RootShell"></service>
         <service android:name="NflogService"></service>
+        <service android:name="dev.ukanth.ufirewall.log.LogService"></service>
         
     </application>
 
