@@ -21,6 +21,7 @@
  */
 package dev.ukanth.ufirewall;
 
+import dev.ukanth.ufirewall.log.LogService;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -30,8 +31,7 @@ public class ConnectivityChangeReceiver extends BroadcastReceiver {
 	public static final String TAG = "AFWall";
 
 	// These are marked "@hide" in WifiManager.java
-	public static final String WIFI_AP_STATE_CHANGED_ACTION =
-			"android.net.wifi.WIFI_AP_STATE_CHANGED";
+	public static final String WIFI_AP_STATE_CHANGED_ACTION = "android.net.wifi.WIFI_AP_STATE_CHANGED";
 	public static final String EXTRA_WIFI_AP_STATE = "wifi_state";
 	public static final String EXTRA_PREVIOUS_WIFI_AP_STATE = "previous_wifi_state";
 	public static final int WIFI_AP_STATE_DISABLING = 10;
@@ -52,5 +52,21 @@ public class ConnectivityChangeReceiver extends BroadcastReceiver {
 		if(G.activeRules()){
 			InterfaceTracker.applyRulesOnChange(context, InterfaceTracker.CONNECTIVITY_CHANGE);
 		}
+
+		final Intent logIntent = new Intent(context, LogService.class);
+		if(G.enableLogService()){
+			 //check if the firewall is enabled
+			if(!Api.isEnabled(context) || !InterfaceTracker.isNetworkUp(context)) {
+				context.stopService(logIntent);
+			} else{
+				//restart the service
+				context.stopService(logIntent);
+				context.startService(logIntent);
+			}
+		 } else {
+			 context.stopService(logIntent);
+		 }
+		//no internet - stop the service
+		
 	}
 }

@@ -6,13 +6,14 @@
         android:summaryOff="@string/notify_pref_summary_off"
         android:summaryOn="@string/notify_pref_summary_on"
         android:title="@string/notify_pref_title" />
-    <CheckBoxPreference
+     <CheckBoxPreference
         android:defaultValue="false"
         android:key="enableLog"
         android:summary="@string/showlog_title"
         android:title="@string/enable_firewall_log" />
+    
     <CheckBoxPreference
-        android:defaultValue="true"
+        android:defaultValue="false"
         android:key="disableIcons"
         android:summaryOff="@string/hideicons_pref_summary_off"
         android:summaryOn="@string/hideicons_pref_summary_on"

@@ -24,8 +24,6 @@
 
 package dev.ukanth.ufirewall;
 
-import group.pals.android.lib.ui.lockpattern.LockPatternActivity;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -46,6 +44,7 @@ import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Message;
+import android.preference.PreferenceManager;
 import android.text.Editable;
 import android.text.TextUtils.TruncateAt;
 import android.text.TextWatcher;
@@ -73,6 +72,8 @@ import com.actionbarsherlock.app.SherlockListActivity;
 import com.actionbarsherlock.view.Menu;
 import com.actionbarsherlock.view.MenuItem;
 import com.actionbarsherlock.view.MenuItem.OnActionExpandListener;
+import com.haibison.android.lockpattern.LockPatternActivity;
+import com.haibison.android.lockpattern.util.Settings;
 
 import dev.ukanth.ufirewall.Api.PackageInfoData;
 import dev.ukanth.ufirewall.RootShell.RootCommand;
@@ -84,7 +85,7 @@ import dev.ukanth.ufirewall.preferences.PreferencesActivity;
  */
 
 public class MainActivity extends SherlockListActivity implements OnClickListener,
-					ActionBar.OnNavigationListener,OnCreateOptionsMenuListener  {
+					ActionBar.OnNavigationListener,OnCreateOptionsMenuListener, OnCheckedChangeListener  {
 
 	private TextView mSelected;
     private String[] mLocations;
@@ -96,6 +97,15 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 	private ListView listview = null;
 	/** indicates if the view has been modified and not yet saved */
 	public static boolean dirty = false;
+	
+	public boolean isDirty() {
+		return dirty;
+	}
+
+	public void setDirty(boolean dirty) {
+		MainActivity.dirty = dirty;
+	}
+
 	private String currentPassword = "";
 	
 	public String getCurrentPassword() {
@@ -106,8 +116,8 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 		this.currentPassword = currentPassword;
 	}
 	
-	private final int _ReqCreatePattern = 0;
-	private final int _ReqSignIn = 1;
+	private static final int REQ_CREATE_PATTERN = 9877;
+	private static final int REQ_ENTER_PATTERN = 9755;
 	private boolean isPassVerify = false;
 	
 	ProgressDialog plsWait;
@@ -116,7 +126,7 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 	
 	private int index;
 	private int top;
-
+	
 	/** Called when the activity is first created
 	 * . */
 	@Override
@@ -138,11 +148,14 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 			} catch (Exception e) {
 			}
 			checkPreferences();
+			
+			 //language
+		    Api.updateLanguage(getApplicationContext(), G.locale());
+		    
 			setContentView(R.layout.main);
 			//set onclick listeners
 			this.findViewById(R.id.label_mode).setOnClickListener(this);
 			this.findViewById(R.id.img_wifi).setOnClickListener(this);
-			this.findViewById(R.id.img_3g).setOnClickListener(this);
 			this.findViewById(R.id.img_reset).setOnClickListener(this);
 			this.findViewById(R.id.img_invert).setOnClickListener(this);
 			
@@ -160,72 +173,64 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 			if(G.enableVPN()){
 				addColumns(R.id.img_vpn);
 			}
+			
+			if(!Api.isMobileNetworkSupported(getApplicationContext())){
+				ImageView view = (ImageView)this.findViewById(R.id.img_3g);
+				view.setVisibility(View.GONE);
+			} else {
+				this.findViewById(R.id.img_3g).setOnClickListener(this);
+			}
 
 			if(G.enableLAN()){
 				addColumns(R.id.img_lan);
 			}
 
-
-			setupMultiProfile();
+			/**/
 			
-			updateIconStatus();
-			
-			//language
-			String lang = G.locale();
-			Api.updateLanguage(getApplicationContext(), lang);
+			updateRadioFilter();
+	        
+	        //start logging
+	       /* if(G.enableLogService()) {
+	        	Intent intent = new Intent(getApplicationContext(), LogService.class);
+				getApplicationContext().startService(intent);
+	        }*/
+	        
+        	Settings.Display.setStealthMode(getApplicationContext(), G.enableStealthPattern());
+	        Settings.Display.setMaxRetries(getApplicationContext(), G.getMaxPatternTry());
+	       
+		    Api.assertBinaries(this, true);
+		    
+		   
 			plsWait = new ProgressDialog(this);
 	        plsWait.setCancelable(false);
-	        
-	        updateFilterGroup();
-	       
-	        
-		    Api.assertBinaries(this, true);
+		    
 		    
 	}
 	
 	
-	/*private void selectFilterGroup() {
+	private void updateRadioFilter() {
+		RadioGroup radioGroup = (RadioGroup) findViewById(R.id.appFilterGroup);
+		radioGroup.setOnCheckedChangeListener(this);
+	}
+
+	private void selectFilterGroup() {
 		RadioGroup radioGroup = (RadioGroup) findViewById(R.id.appFilterGroup);
 		switch (radioGroup.getCheckedRadioButtonId()) {
-		case R.id.rpkg_all:
-			showOrLoadApplications();
-			break;
 		case R.id.rpkg_core:
-			showFilterApplications(0);
+			showApplications(null, 0);
 			break;
 		case R.id.rpkg_sys:
-			showFilterApplications(1);
+			showApplications(null, 1);
 			break;
 		case R.id.rpkg_user:
-			showFilterApplications(2);
+			showApplications(null, 2);
 			break;
 		default:
-			showOrLoadApplications();
+			showApplications("",-1);
 			break;
 		}
-	}*/
-	
-	private void updateFilterGroup() {
-		RadioGroup radioGroup = (RadioGroup) findViewById(R.id.appFilterGroup);
-		radioGroup.setOnCheckedChangeListener(new OnCheckedChangeListener() {
-			public void onCheckedChanged(RadioGroup group, int checkedId) {
-				switch (checkedId) {
-				case R.id.rpkg_all:
-					showOrLoadApplications();
-					break;
-				case R.id.rpkg_core:
-					showFilterApplications(0);
-					break;
-				case R.id.rpkg_sys:
-					showFilterApplications(1);
-					break;
-				case R.id.rpkg_user:
-					showFilterApplications(2);
-					break;
-				}
-			}
-		});
 	}
+	
 
 	private void updateIconStatus() {
 		if(Api.isEnabled(getApplicationContext())) {
@@ -244,10 +249,23 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 		List<String> cmds = new ArrayList<String>();
 		cmds.add("true");
 		
-		updateIconStatus();
-
 		new RootCommand().setFailureToast(R.string.error_su)
 				.setReopenShell(true).run(getApplicationContext(), cmds);
+		
+		if (this.listview == null) {
+			this.listview = (ListView) this.findViewById(R.id.listview);
+		}
+		
+		setupMultiProfile();
+		refreshHeader();
+		updateIconStatus();
+
+		NotificationManager mNotificationManager = (NotificationManager) this.getSystemService(Context.NOTIFICATION_SERVICE);
+		mNotificationManager.cancel(24556);
+		
+		if(passCheck()){
+	    	showOrLoadApplications();
+	    }
 		
 	}
 
@@ -260,20 +278,6 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 	@Override
 	protected void onResume() {
 		super.onResume();
-		if (this.listview == null) {
-			this.listview = (ListView) this.findViewById(R.id.listview);
-		}
-		
-		setupMultiProfile();
-		refreshHeader();
-		updateIconStatus();
-		
-		NotificationManager mNotificationManager = (NotificationManager) this.getSystemService(Context.NOTIFICATION_SERVICE);
-		mNotificationManager.cancel(24556);
-		
-		passCheck();
-		
-		
 	}
 	
 	private void setupMultiProfile(){
@@ -294,7 +298,7 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 				mlocalList.add(profiles);
 			}
 			
-			int position = G.gPrefs.getInt("storedPosition", -1);
+			int position = G.storedPosition();
 			//something went wrong - No profiles but still it's set more. reset to default
 			if(!isAdditionalProfiles && position > 3) {
 				G.storedPosition(0);
@@ -325,7 +329,7 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 		}
 	}
 	
-	private void passCheck(){
+	private boolean passCheck(){
 		
 		//wait for 30 seconds before prompt for password again.
 	    //if (System.currentTimeMillis() - mLastPause > 30000) {
@@ -335,31 +339,27 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 				if(!isPassVerify){
 					final String pwd = G.sPrefs.getString("LockPassword", "");
 					if (pwd.length() == 0) {
-						showOrLoadApplications();
+						return true;
 					} else {
 						// Check the password
 						requestPassword(pwd);
 					}
 				}else {
-					showOrLoadApplications();
+					return true;
 				}	
 			} else{
 				final String oldpwd = G.pPrefs.getString(Api.PREF_PASSWORD, "");
 				if (oldpwd.length() == 0) {
-					// No password lock
-					showOrLoadApplications();
+					return true;
 				} else {
 					// Check the password
 					requestPassword(oldpwd);	
-
 				}	
 			}
 	    } else {
-			showOrLoadApplications();
-			
+	    	return true;
 	    }
-		
-
+		return false;
 	}
 
 	@Override
@@ -453,11 +453,10 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 	private void requestPassword(final String pwd) {
 
 		if(G.usePatterns()){
-			Intent intent = new Intent(getApplicationContext(), LockPatternActivity.class);
-			intent.putExtra(LockPatternActivity._Mode, LockPatternActivity.LPMode.ComparePattern);
-			intent.putExtra(LockPatternActivity._MaxRetry, "3");
-			intent.putExtra(LockPatternActivity._Pattern, pwd);
-			startActivityForResult(intent, _ReqSignIn);	
+			Intent intent = new Intent(LockPatternActivity.ACTION_COMPARE_PATTERN, null, getApplicationContext(), LockPatternActivity.class);
+			String savedPattern  = G.sPrefs.getString("LockPassword", "");
+			intent.putExtra(LockPatternActivity.EXTRA_PATTERN, savedPattern.toCharArray());
+			startActivityForResult(intent, REQ_ENTER_PATTERN);
 		}
 		else{
 			new PassDialog(this, false, new android.os.Handler.Callback() {
@@ -488,13 +487,13 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 	private void showOrLoadApplications() {
 		//nocache!!
 		new GetAppList().execute();	
-		
 	}
 	
 
 	public class GetAppList extends AsyncTask<Void, Integer, Void> {
 
 		boolean ready = false;
+		boolean started = false;
 		Activity mContext = null;
 		AsyncTask<Void,Integer,Void> myAsyncTaskInstance = null; 
 
@@ -555,9 +554,11 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 
 		@Override
 		protected void onPostExecute(Void result) {
-			showApplications("");
+			selectFilterGroup();
+			
 			publishProgress(-1);
 			try {
+				started = false; 
 				plsWait.dismiss();
 			} catch (Exception e) {
 				// nothing
@@ -606,8 +607,8 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 	/**
 	 * Show the list of applications
 	 */
-	private void showApplications(final String searchStr) {
-		this.dirty = false;
+	private void showApplications(final String searchStr, int flag) {
+		setDirty(false);
 		List<PackageInfoData> searchApp = new ArrayList<PackageInfoData>();
 		final List<PackageInfoData> apps = Api.getApps(this,null);
 		boolean isResultsFound = false;
@@ -621,10 +622,38 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 					} 
 				}
 			}
+		} else if (flag > -1){
+			switch(flag){
+				case 0:
+					for(PackageInfoData app:apps) {
+					   if(app.pkgName.startsWith("dev.afwall.special")) {
+						   searchApp.add(app);   
+					   }
+					}
+					break;
+				case 1:
+					for(PackageInfoData app: apps) {
+						if (app.appinfo != null && (app.appinfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0) {
+							searchApp.add(app);
+						}
+					}
+					break;
+				case 2:
+					for(PackageInfoData app: apps) {
+						if (app.appinfo != null && (app.appinfo.flags & ApplicationInfo.FLAG_SYSTEM) == 0) {
+							searchApp.add(app);
+						}
+					}
+					break;
+			}
+			
 		}
-		
-		final List<PackageInfoData> apps2 = isResultsFound ? searchApp : searchStr.equals("") ? apps : new ArrayList<Api.PackageInfoData>();
-
+		List<PackageInfoData> apps2;
+		if(!isResultsFound && flag == -1) {
+			apps2 = apps; 
+		} else {
+			apps2 = searchApp;
+		}
 		// Sort applications - selected first, then alphabetically
 		Collections.sort(apps2, new PackageComparator());	
 		
@@ -635,43 +664,11 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 	}
 	
 	
-	private void showFilterApplications(int flag) {
-		List<PackageInfoData> searchApp = new ArrayList<PackageInfoData>();
-		final List<PackageInfoData> apps = Api.getApps(this,null);
-		switch(flag){
-		case 0:
-			for(PackageInfoData app:apps) {
-			   if(app.pkgName.startsWith("dev.afwall.special")) {
-				   searchApp.add(app);   
-			   }
-			}
-			break;
-		case 1:
-			for(PackageInfoData app: apps) {
-				if (app.appinfo != null && (app.appinfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0) {
-					searchApp.add(app);
-				}
-			}
-			break;
-		case 2:
-			for(PackageInfoData app: apps) {
-				if (app.appinfo != null && (app.appinfo.flags & ApplicationInfo.FLAG_SYSTEM) == 0) {
-					searchApp.add(app);
-				}
-			}
-			break;
-		}
-		this.listview.setAdapter(new AppListArrayAdapter(this, getApplicationContext(), searchApp));
-		// restore
-		this.listview.setSelectionFromTop(index, top);
-	}
-	
 
 	@Override
 	public boolean onCreateOptionsMenu(Menu menu) {
 		//language
-		String lang = G.locale();
-		Api.updateLanguage(getApplicationContext(), lang);
+		Api.updateLanguage(getApplicationContext(), G.locale());
 		super.onCreateOptionsMenu(menu);
 		getSupportMenuInflater().inflate(R.menu.menu_bar, menu);
 		mainMenu = menu;
@@ -702,9 +699,8 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 	@Override
 	public boolean onPrepareOptionsMenu(Menu menu) {
 		//language
-		String lang = G.locale();
-		Api.updateLanguage(getApplicationContext(), lang);
 		menuSetApplyOrSave(menu, Api.isEnabled(this));
+		Api.updateLanguage(getApplicationContext(), G.locale());
 		return super.onPrepareOptionsMenu(menu);
 	}
 
@@ -848,7 +844,7 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 	private TextWatcher filterTextWatcher = new TextWatcher() {
 
 		public void afterTextChanged(Editable s) {
-			showApplications(s.toString());
+			showApplications(s.toString(),-1);
 		}
 
 		public void beforeTextChanged(CharSequence s, int start, int count,
@@ -857,7 +853,7 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 
 		public void onTextChanged(CharSequence s, int start, int before,
 				int count) {
-			showApplications(s.toString());
+			showApplications(s.toString(),-1);
 		}
 
 	};
@@ -960,9 +956,11 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 				AlertDialog diaBox = resetPassword();
 				diaBox.show();
 			} else {
-				Intent intent = new Intent(MainActivity.this, LockPatternActivity.class);
-				intent.putExtra(LockPatternActivity._Mode, LockPatternActivity.LPMode.CreatePattern);
-				startActivityForResult(intent, _ReqCreatePattern);
+				//Intent intent = new Intent(MainActivity.this, LockPatternActivity.class);
+				//intent.putExtra(LockPatternActivity._Mode, LockPatternActivity.LPMode.CreatePattern);
+				//startActivityForResult(intent, _ReqCreatePattern);
+				Intent intent = new Intent(LockPatternActivity.ACTION_CREATE_PATTERN, null,getApplicationContext(), LockPatternActivity.class);
+				startActivityForResult(intent, REQ_CREATE_PATTERN);
 			}	
 		}  else {
 			new PassDialog(this, true, new android.os.Handler.Callback() {
@@ -997,32 +995,43 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 			if(resultCode == RESULT_OK){
 				Intent intent = getIntent();
 			    finish();
-			    String lang = G.locale();
-				Api.updateLanguage(getApplicationContext(), lang);
+				Api.updateLanguage(getApplicationContext(), G.locale());
 			    startActivity(intent);
 			}
 		}
 		
 		if(G.usePatterns()){
 			switch (requestCode) {
-			case _ReqCreatePattern:
+			case REQ_CREATE_PATTERN:
 				if (resultCode == RESULT_OK) {
-		            String pattern = data.getStringExtra(LockPatternActivity._Pattern);
+					char[] pattern = data.getCharArrayExtra(
+			                    LockPatternActivity.EXTRA_PATTERN);
 		    		final Editor editor = G.sPrefs.edit();
-	    			editor.putString("LockPassword", pattern);
+	    			editor.putString("LockPassword", new String(pattern));
 	    			editor.commit();
 				}
 				break;
-			case _ReqSignIn:
-				if (resultCode == RESULT_OK) {
-					isPassVerify= true;
-					showOrLoadApplications();
-				} else {
-					MainActivity.this.finish();
-					android.os.Process.killProcess(android.os.Process.myPid());
+				
+			case REQ_ENTER_PATTERN: {
+				switch (resultCode) {
+					case RESULT_OK:
+						isPassVerify = true;
+						showOrLoadApplications();
+						break;
+					case RESULT_CANCELED:
+						MainActivity.this.finish();
+						android.os.Process.killProcess(android.os.Process.myPid());
+						break;
+					case LockPatternActivity.RESULT_FAILED:
+						MainActivity.this.finish();
+						android.os.Process.killProcess(android.os.Process.myPid());
+						break;
+					case LockPatternActivity.RESULT_FORGOT_PATTERN:
+						break;
+					}
 				}
-				break;
-			}	
+			}
+			
 		}
 		
 	    if (resultCode == RESULT_OK
@@ -1092,7 +1101,7 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 		if (!enabled) {
 			Api.setEnabled(ctx, false, true);
 			Api.displayToasts(ctx, R.string.rules_saved, Toast.LENGTH_SHORT);
-			MainActivity.this.dirty = false;
+			setDirty(false);
 			return;
 		}
 
@@ -1116,7 +1125,7 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 				boolean result = enabled;
 
 				if (state.exitCode == 0) {
-					MainActivity.this.dirty = false;
+					setDirty(false);
 				} else {
 					result = false;
 				}
@@ -1195,7 +1204,7 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 			for (item = 0; item < count; item++) {
 				PackageInfoData data = (PackageInfoData) adapter.getItem(item); 
 				data.selected_lan = flag;
-				this.dirty = true;
+				setDirty(true);
 			}
 			((BaseAdapter) adapter).notifyDataSetChanged();
 		}
@@ -1211,7 +1220,7 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 			for (item = 0; item < count; item++) {
 				PackageInfoData data = (PackageInfoData) adapter.getItem(item); 
 				data.selected_vpn = flag;
-				this.dirty = true;
+				setDirty(true);
 			}
 			((BaseAdapter) adapter).notifyDataSetChanged();
 		}
@@ -1243,7 +1252,7 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 					data.selected_lan = !data.selected_lan;
 					break;
 				}
-				this.dirty = true;
+				setDirty(true);
 			}
 			((BaseAdapter) adapter).notifyDataSetChanged();
 		}
@@ -1263,7 +1272,7 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 				data.selected_roam = !data.selected_roam;
 				data.selected_vpn = !data.selected_vpn;
 				data.selected_lan = !data.selected_lan;
-				this.dirty = true;
+				setDirty(true);
 			}
 			((BaseAdapter) adapter).notifyDataSetChanged();
 		}
@@ -1280,7 +1289,7 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 			for (item = 0; item < count; item++) {
 				PackageInfoData data = (PackageInfoData) adapter.getItem(item); 
 				data.selected_roam = flag;
-				this.dirty = true;
+				setDirty(true);
 			}
 			((BaseAdapter) adapter).notifyDataSetChanged();
 		}
@@ -1300,7 +1309,7 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 				data.selected_roam = false;
 				data.selected_vpn = false;
 				data.selected_lan = false;
-				this.dirty = true;
+				setDirty(true);
 			}
 			((BaseAdapter) adapter).notifyDataSetChanged();
 		}
@@ -1316,7 +1325,7 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 			for (item = 0; item < count; item++) {
 				PackageInfoData data = (PackageInfoData) adapter.getItem(item); 
 				data.selected_3g = flag;
-				this.dirty = true;
+				setDirty(true);
 			}
 			((BaseAdapter) adapter).notifyDataSetChanged();
 		}
@@ -1333,7 +1342,7 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 			for (item = 0; item < count; item++) {
 				PackageInfoData data = (PackageInfoData) adapter.getItem(item);
 				data.selected_wifi = flag;
-				this.dirty = true;
+				setDirty(true);
 			}
 			((BaseAdapter) adapter).notifyDataSetChanged();
 		}
@@ -1370,7 +1379,7 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 					case DialogInterface.BUTTON_NEGATIVE:
 						// Propagate the event back to perform the desired
 						// action
-						MainActivity.this.dirty = false;
+						setDirty(false);
 						Api.applications = null;
 						finish();
 						System.exit(0);
@@ -1596,6 +1605,25 @@ public class MainActivity extends SherlockListActivity implements OnClickListene
 			}
 		});
 		
+	}
+
+	@Override
+	public void onCheckedChanged(RadioGroup group, int checkedId) {
+		switch (checkedId) {
+			case R.id.rpkg_all:
+				
+				showOrLoadApplications();
+				break;
+			case R.id.rpkg_core:
+				showApplications(null, 0);
+				break;
+			case R.id.rpkg_sys:
+				showApplications(null, 1);
+				break;
+			case R.id.rpkg_user:
+				showApplications(null, 2);
+				break;
+			}
 	}
 	
 }

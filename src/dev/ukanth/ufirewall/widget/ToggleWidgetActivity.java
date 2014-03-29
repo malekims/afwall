@@ -1,5 +1,9 @@
 package dev.ukanth.ufirewall.widget;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
 import android.app.Activity;
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -7,91 +11,197 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
-import android.view.View;
-import android.view.View.OnClickListener;
-import android.widget.Button;
+import android.widget.LinearLayout;
 import android.widget.Toast;
 import dev.ukanth.ufirewall.Api;
 import dev.ukanth.ufirewall.G;
 import dev.ukanth.ufirewall.R;
+import dev.ukanth.ufirewall.RootShell.RootCommand;
+import dev.ukanth.ufirewall.widget.RadialMenuWidget.RadialMenuEntry;
 
-public class ToggleWidgetActivity extends Activity implements OnClickListener {
+public class ToggleWidgetActivity extends Activity {
 	
-	private static Button enableButton;
-	private static Button disableButton;
-	private static Button defaultButton;
-	private static Button profButton1;
-	private static Button profButton2;
-	private static Button profButton3;
+	private RadialMenuWidget pieMenu;
+	private LinearLayout ll;
 	
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.toggle_widget_view);
-
-		enableButton = (Button) this
-				.findViewById(R.id.toggle_enable_firewall);
-		disableButton = (Button) this
-				.findViewById(R.id.toggle_disable_firewall);
-		defaultButton = (Button) this
-				.findViewById(R.id.toggle_default_profile);
-		profButton1 = (Button) this.findViewById(R.id.toggle_profile1);
-		profButton2 = (Button) this.findViewById(R.id.toggle_profile2);
-		profButton3 = (Button) this.findViewById(R.id.toggle_profile3);
-
-		if (Api.isEnabled(getApplicationContext())) {
-			enableOthers();
-		} else {
-			disableOthers();
-		}
-
-		enableButton.setOnClickListener(this);
-		disableButton.setOnClickListener(this);
-		defaultButton.setOnClickListener(this);
-		profButton1.setOnClickListener(this);
-		profButton2.setOnClickListener(this);
-		profButton3.setOnClickListener(this);
 		
-		if(!G.enableMultiProfile()) {
-			profButton1.setEnabled(false);
-			profButton2.setEnabled(false);
-			profButton3.setEnabled(false);
-		} else {
-			if(Api.isEnabled(getApplicationContext())) {
-				int position = G.storedPosition();
-				if (position == 0) {
-					disableDefault();
-				} else {
-					disableCustom(position);	
-				}
-			}
+		ll = (LinearLayout) this.findViewById(R.id.widgetCircle);
+		pieMenu = new RadialMenuWidget(getBaseContext());
+
+		pieMenu.setAnimationSpeed(0L);
+		//pieMenu.setSourceLocation(100,100);
+		//pieMenu.setCenterLocation(240,400);
+		//pieMenu.setInnerRingRadius(50, 120);
+		//pieMenu.setInnerRingColor(Color.LTGRAY, 255);
+		//pieMenu.setHeader("Menu Header", 20);
+
+		int xLayoutSize = ll.getWidth();
+		int yLayoutSize = ll.getHeight();				
+		pieMenu.setSourceLocation(xLayoutSize,yLayoutSize);
+		pieMenu.setIconSize(15, 30);
+		pieMenu.setTextSize(13);				
+		
+		pieMenu.setCenterCircle(new Close());
+		pieMenu.addMenuEntry(new Status());
+		pieMenu.addMenuEntry(new EnableFirewall());
+		pieMenu.addMenuEntry(new DisableFirewall());
+		
+		if(G.enableMultiProfile()){
+			pieMenu.addMenuEntry(new Profiles());
 		}
+		
+		ll.addView(pieMenu);
+
 
 	}
+	
+	
+	  public class Close implements RadialMenuEntry
+	   {
 
-	@Override
-	public void onClick(View v) {
-		switch (v.getId()) {
-		case R.id.toggle_enable_firewall:
-			startAction(1);
-			break;
-		case R.id.toggle_disable_firewall:
-			startAction(2);
-			break;
-		case R.id.toggle_default_profile:
-			startAction(3);
-			break;
-		case R.id.toggle_profile1:
-			startAction(4);
-			break;
-		case R.id.toggle_profile2:
-			startAction(5);
-			break;
-		case R.id.toggle_profile3:
-			startAction(6);
-			break;
-		}
-	}
+		  public String getName() { return "Close"; } 
+		  public String getLabel() { return null; } 
+	      public int getIcon() { return android.R.drawable.ic_menu_close_clear_cancel; }
+	      public List<RadialMenuEntry> getChildren() { return null; }
+	      public void menuActiviated()
+	      {
+	    	  ll = (LinearLayout) findViewById(R.id.widgetCircle);
+	    	  ll.removeAllViews();
+	    	  finish();
+	      }
+	   }	
+	
+	  public class EnableFirewall implements RadialMenuEntry
+	   {
+	      public String getName() { return ""; } 
+		  public String getLabel() { return getString(R.string.enable); } 
+		  public int getIcon() { return 0; }
+	      public List<RadialMenuEntry> getChildren() { return null; }
+	      public void menuActiviated()
+	      {
+	    	  startAction(1);
+	      }
+	   }	
+	  
+	  public class Status implements RadialMenuEntry
+	   {
+	      public String getName() { return G.getActiveProfileName(getApplicationContext()); } 
+		  public String getLabel() { return G.getActiveProfileName(getApplicationContext()); } 
+		  public int getIcon() { return (Api.isEnabled(getApplicationContext()) ?  R.drawable.widget_on :  R.drawable.widget_off); }
+	      public List<RadialMenuEntry> getChildren() { return null; }
+	      public void menuActiviated()
+	      {
+	    	  
+	      }
+	   }	
+	  
+	  public class DisableFirewall implements RadialMenuEntry
+	   {
+	      public String getName() { return ""; } 
+		  public String getLabel() { return getString(R.string.disable); } 
+		  public int getIcon() { return 0; }
+	      public List<RadialMenuEntry> getChildren() { return null; }
+	      public void menuActiviated()
+	      {
+	    	  startAction(2);
+	      }
+	   }	
+	   
+
+	   public class Profiles implements RadialMenuEntry
+	   {
+	      public String getName() { return "Profiles"; } 
+		  public String getLabel() { return "Profiles"; }
+	      public int getIcon() { return 0; }
+	      private List<RadialMenuEntry> children = new ArrayList<RadialMenuEntry>( Arrays.asList( new DefaultProfile(), new Profile1(), new Profile2(), new Profile3() ) );
+	      public List<RadialMenuEntry> getChildren() { return children; }
+	      public Profiles(){
+	    	  for(String profileName: G.getAdditionalProfiles()) {
+	    		  RadialMenuEntry entry = new GenericProfile(profileName);
+	    		  children.add(entry);
+	    	  }
+	      }
+	      public void menuActiviated()
+	      {
+	      }
+	   }	
+	   
+	   public class GenericProfile implements RadialMenuEntry
+       {
+          public String getName() { return profileName; } 
+          public String getLabel() { return profileName; }
+          public int getIcon() { return 0; }
+          private String profileName;
+          public GenericProfile(String profileName){
+        	  this.profileName = profileName;
+          }
+          public List<RadialMenuEntry> getChildren() { return null; }
+          public void menuActiviated()
+          {
+        	  int pos = G.getProfilePosition(profileName);
+        	  final Message msg = new Message();
+        	  Toast.makeText(getApplicationContext(), profileName + " pressed. + position" + pos, Toast.LENGTH_SHORT).show();
+        	  final Handler toaster = new Handler() {
+      			public void handleMessage(Message msg) {
+      				if (msg.arg1 != 0)Toast.makeText(getApplicationContext(), msg.arg1, Toast.LENGTH_SHORT).show();
+      			}
+      		};
+      		final Context context = getApplicationContext();
+      		G.setProfile(true, pos);
+			applyProfileRules(context,msg,toaster);
+          }
+       }    
+	   
+	   public class DefaultProfile implements RadialMenuEntry
+       {
+          public String getName() { return G.gPrefs.getString("default", getApplicationContext().getString(R.string.defaultProfile)); } 
+          public String getLabel() { return G.gPrefs.getString("default", getApplicationContext().getString(R.string.defaultProfile)); }
+          public int getIcon() { return 0; }
+          public List<RadialMenuEntry> getChildren() { return null; }
+          public void menuActiviated()
+          {
+        	  startAction(3);
+          }
+       }    
+	   public class Profile1 implements RadialMenuEntry
+       {
+          public String getName() { return G.gPrefs.getString("profile1", getString(R.string.profile1)); } 
+              public String getLabel() { return G.gPrefs.getString("profile1", getString(R.string.profile1)); }
+          public int getIcon() { return 0; }
+          public List<RadialMenuEntry> getChildren() { return null; }
+          public void menuActiviated()
+          {
+        	  startAction(4);
+          }
+       }    
+	   public class Profile2 implements RadialMenuEntry
+       {
+          public String getName() { return G.gPrefs.getString("profile2", getString(R.string.profile2)); } 
+          public String getLabel() { return G.gPrefs.getString("profile2", getString(R.string.profile2)); }
+          public int getIcon() { return 0; }
+          public List<RadialMenuEntry> getChildren() { return null; }
+          public void menuActiviated()
+          {
+        	  startAction(5);
+          }
+       }    
+	   public class Profile3 implements RadialMenuEntry
+       {
+          public String getName() { return G.gPrefs.getString("profile3", getString(R.string.profile3)); } 
+          public String getLabel() { return G.gPrefs.getString("profile3", getString(R.string.profile3)); }
+          public int getIcon() { return 0; }
+          public List<RadialMenuEntry> getChildren() { return null; }
+          public void menuActiviated()
+          {
+        	  startAction(6);
+          }
+       }    
+	  
+
 
 	private void startAction(final int i) {
 		
@@ -109,135 +219,57 @@ public class ToggleWidgetActivity extends Activity implements OnClickListener {
 			public void run() {
 				Looper.prepare();
 				final Message msg = new Message();
-				switch(i){
-				case 1: 
-					if(applyRules(context,msg,toaster)){
-						Api.setEnabled(context, true, false);
-					}
-					break;
-				case 2:
-					//validation, check for password
-					
-					
-					if(oldPwd.length() == 0 && newPwd.length() == 0){
-						if (Api.purgeIptables(context, false)) {
-							msg.arg1 = R.string.toast_disabled;
-							toaster.sendMessage(msg);
-							disableOthers();
-							Api.setEnabled(context, false, false);
+				if( i < 7) {
+					switch(i){
+					case 1: 
+						if(applyRules(context,msg,toaster)){
+							Api.setEnabled(context, true, false);
+						}
+						break;
+					case 2:
+						//validation, check for password
+						if(oldPwd.length() == 0 && newPwd.length() == 0){
+							if (Api.purgeIptables(context, false)) {
+								msg.arg1 = R.string.toast_disabled;
+								toaster.sendMessage(msg);
+								Api.setEnabled(context, false, false);
+							} else {
+								msg.arg1 = R.string.toast_error_disabling;
+								toaster.sendMessage(msg);
+							}
 						} else {
-							msg.arg1 = R.string.toast_error_disabling;
+							msg.arg1 = R.string.widget_disable_fail;
 							toaster.sendMessage(msg);
 						}
-					} else {
-						msg.arg1 = R.string.widget_disable_fail;
-						toaster.sendMessage(msg);
+						break;
+					case 3:
+						G.setProfile(G.enableMultiProfile(), 0);
+						break;
+					case 4:
+						G.setProfile(true, 1);
+						break;
+					case 5:
+						G.setProfile(true, 2);
+						break;
+					case 6:
+						G.setProfile(true, 3);
+						break;
 					}
-					
-					break;
-				case 3:
-					G.setProfile(G.enableMultiProfile(), 0);
-					if(applyProfileRules(context,msg,toaster)) {
-						disableDefault();
+					if(i > 2) {
+						applyProfileRules(context,msg,toaster);
 					}
-					break;
-				case 4:
-					G.setProfile(true, 1);
-					if(applyProfileRules(context,msg,toaster)){
-						disableCustom(1);
-					}
-					break;
-				case 5:
-					G.setProfile(true, 2);
-					if(applyProfileRules(context,msg,toaster)){
-						disableCustom(2);
-					}
-					break;
-				case 6:
-					G.setProfile(true, 3);
-					if(applyProfileRules(context,msg,toaster)){
-						disableCustom(3);
-					}
-					break;
 				}
 			}
 		}.start();
 	}
 	
-	private void enableOthers() {
-		runOnUiThread(new Runnable() {
-			public void run() {
-				enableButton.setEnabled(false);
-				disableButton.setEnabled(true);
-				defaultButton.setEnabled(true);
-				if (G.enableMultiProfile()){
-					profButton1.setEnabled(true);
-					profButton2.setEnabled(true);
-					profButton3.setEnabled(true);
-				}
-			}
-		});
 
-	}
-
-	private void disableOthers() {
-		runOnUiThread(new Runnable() {
-			public void run() {
-				enableButton.setEnabled(true);
-				disableButton.setEnabled(false);
-				defaultButton.setEnabled(false);
-				profButton1.setEnabled(false);
-				profButton2.setEnabled(false);
-				profButton3.setEnabled(false);
-			}
-		});
-	}
-	
-	private void disableDefault() {
-		runOnUiThread(new Runnable() {
-			public void run() {
-				defaultButton.setEnabled(false);
-				if (G.enableMultiProfile()) {
-					profButton1.setEnabled(true);
-					profButton2.setEnabled(true);
-					profButton3.setEnabled(true);
-				}
-			}
-		});
-	}
-	
-	private void disableCustom(final int code) {
-		runOnUiThread(new Runnable() {
-			public void run() {
-				switch(code){
-				case 1:
-					defaultButton.setEnabled(true);
-					profButton1.setEnabled(false);
-					profButton2.setEnabled(true);
-					profButton3.setEnabled(true);
-					break;
-				case 2:
-					defaultButton.setEnabled(true);
-					profButton1.setEnabled(true);
-					profButton2.setEnabled(false);
-					profButton3.setEnabled(true);
-					break;
-				case 3:
-					defaultButton.setEnabled(true);
-					profButton1.setEnabled(true);
-					profButton2.setEnabled(true);
-					profButton3.setEnabled(false);	
-				}
-			}
-		});
-	}
 	
 	private boolean applyRules(Context context,Message msg, Handler toaster) {
 		boolean success = false;
 		if (Api.applySavedIptablesRules(context, false)) {
 			msg.arg1 = R.string.toast_enabled;
 			toaster.sendMessage(msg);
-			enableOthers();
 			success = true;
 		} else {
 			msg.arg1 = R.string.toast_error_enabling;
@@ -246,19 +278,26 @@ public class ToggleWidgetActivity extends Activity implements OnClickListener {
 		return success;
 	}
 	
-	private boolean applyProfileRules(Context context,Message msg, Handler toaster) {
-		boolean success = false;
-		if (Api.applySavedIptablesRules(context, false)) {
-			msg.arg1 = R.string.rules_applied;
-			toaster.sendMessage(msg);
-			enableOthers();
-			success = true;
-		} else {
-			msg.arg1 = R.string.error_apply;
-			toaster.sendMessage(msg);
-		}
-		return success;
+	private boolean applyProfileRules(final Context context,final Message msg, final Handler toaster) {
+		boolean ret = Api.fastApply(context, new RootCommand()
+		.setFailureToast(R.string.error_apply)
+		.setCallback(new RootCommand.Callback() {
+			@Override
+			public void cbFunc(RootCommand state) {
+				if (state.exitCode == 0) {
+					msg.arg1 = R.string.rules_applied;
+					toaster.sendMessage(msg);
+				} else {
+					// error details are already in logcat
+					msg.arg1 = R.string.error_apply;
+					toaster.sendMessage(msg);
+				}
+			}
+		}));
+		return ret;
 	}
+	
+	
 }
 
 

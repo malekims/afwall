@@ -22,14 +22,15 @@
 
 package dev.ukanth.ufirewall;
 
+import android.content.Context;
+import android.os.Bundle;
+
 import com.actionbarsherlock.view.Menu;
 import com.actionbarsherlock.view.MenuItem;
 import com.actionbarsherlock.view.SubMenu;
 
 import dev.ukanth.ufirewall.RootShell.RootCommand;
-
-import android.content.Context;
-import android.os.Bundle;
+import dev.ukanth.ufirewall.log.LogInfo;
 
 public class LogActivity extends DataDumpActivity {
 
@@ -44,7 +45,7 @@ public class LogActivity extends DataDumpActivity {
 	}
 
 	protected void parseAndSet(Context ctx, String raw) {
-		String cooked = Api.parseLog(ctx, raw);
+		String cooked = LogInfo.parseLog(ctx, raw);
 		if (cooked == null) {
 			setData(getString(R.string.log_parse_error));
 		} else {
@@ -57,6 +58,7 @@ public class LogActivity extends DataDumpActivity {
 			parseAndSet(ctx, NflogService.fetchLogs());
 			return;
 		}
+		
 		boolean enabled = Api.fetchLogs(ctx, new RootCommand()
 			.setLogging(true)
 			.setReopenShell(true)
@@ -77,11 +79,6 @@ public class LogActivity extends DataDumpActivity {
 	}
 
 	protected void populateMenu(SubMenu sub) {
-		/*if (G.enableFirewallLog()) {
-			sub.add(0,MENU_TOGGLE_LOG, 0, R.string.disable_log).setIcon(R.drawable.disable_log);
-		} else {
-			sub.add(0,MENU_TOGGLE_LOG, 0, R.string.enable_log).setIcon(R.drawable.enable_log);
-		}*/
 		sub.add(0, MENU_CLEARLOG, 0, R.string.clear_log).setIcon(R.drawable.clearlog);
 	}
 

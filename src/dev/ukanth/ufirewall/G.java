@@ -45,6 +45,7 @@ public class G extends android.app.Application {
 	private static final String ENABLE_IPV6 = "enableIPv6";
 	private static final String ENABLE_INBOUND = "enableInbound";
 	private static final String ENABLE_LOG = "enableLog";
+	private static final String ENABLE_LOG_SERVICE = "enableLogService";
 	private static final String ENABLE_ADMIN = "enableAdmin";
 	private static final String ENABLE_CONFIRM = "enableConfirm";
 	private static final String ENABLE_MULTI_PROFILE =  "enableMultiProfile";
@@ -57,16 +58,20 @@ public class G extends android.app.Application {
 	private static final String PROFILE_STORED_POSITION = "storedPosition";
 	private static final String SYSTEM_APP_COLOR = "sysColor";
 	private static final String ACTIVE_RULES = "activeRules";
-	private static final String USE_PASSWORD_PATTERN = "usePatterns";
+	
 	private static final String PROFILE_SWITCH = "applyOnSwitchProfiles";
 	private static final String LOG_TARGET = "logTarget";
 	private static final String APP_VERSION = "appVersion";
-	private static final String DNS_PROXY = "dns_proxy";
+	private static final String DNS_PROXY = "dns_value";
 	
 	private static final String MULTI_USER = "multiUser";
 	private static final String MULTI_USER_ID = "multiUserId";
 	
 	private static final String SHOW_FILTER = "showFilter";
+	
+	private static final String USE_PASSWORD_PATTERN = "usePatterns";
+	private static final String PATTERN_MAX_TRY = "patternMax";
+	private static final String PATTERN_STEALTH = "stealthMode";
 	
 	private static final String AFWALL_STATUS = "AFWallStaus";
 	
@@ -105,13 +110,13 @@ public class G extends android.app.Application {
 	public static boolean disableTaskerToast() { return gPrefs.getBoolean(DISABLE_TASKER_TOAST, false); }
 	public static boolean disableTaskerToast(boolean val) { gPrefs.edit().putBoolean(DISABLE_TASKER_TOAST, val).commit(); return val; }
 
-	public static boolean enableRoam() { return gPrefs.getBoolean(ENABLE_ROAM, true); }
+	public static boolean enableRoam() { return gPrefs.getBoolean(ENABLE_ROAM, false); }
 	public static boolean enableRoam(boolean val) { gPrefs.edit().putBoolean(ENABLE_ROAM, val).commit(); return val; }
 
 	public static boolean enableVPN() { return gPrefs.getBoolean(ENABLE_VPN, false); }
 	public static boolean enableVPN(boolean val) { gPrefs.edit().putBoolean(ENABLE_VPN, val).commit(); return val; }
 
-	public static boolean enableLAN() { return gPrefs.getBoolean(ENABLE_LAN, false); }
+	public static boolean enableLAN() { return gPrefs.getBoolean(ENABLE_LAN, true); }
 	public static boolean enableLAN(boolean val) { gPrefs.edit().putBoolean(ENABLE_LAN, val).commit(); return val; }
 
 	public static boolean enableIPv6() { return gPrefs.getBoolean(ENABLE_IPV6, false); }
@@ -122,6 +127,9 @@ public class G extends android.app.Application {
 
 	public static boolean enableLog() { return gPrefs.getBoolean(ENABLE_LOG, false); }
 	public static boolean enableLog(boolean val) { gPrefs.edit().putBoolean(ENABLE_LOG, val).commit(); return val; }
+	
+	public static boolean enableLogService() { return gPrefs.getBoolean(ENABLE_LOG_SERVICE, false); }
+	public static boolean enableLogService(boolean val) { gPrefs.edit().putBoolean(ENABLE_LOG_SERVICE, val).commit(); return val; }
 
 	public static boolean enableAdmin() { return gPrefs.getBoolean(ENABLE_ADMIN, false); }
 	public static boolean enableAdmin(boolean val) { gPrefs.edit().putBoolean(ENABLE_ADMIN, val).commit(); return val; }
@@ -167,7 +175,12 @@ public class G extends android.app.Application {
 	
 	public static boolean usePatterns() { return gPrefs.getBoolean(USE_PASSWORD_PATTERN, false); }
 	
+	public static boolean enableStealthPattern() { return gPrefs.getBoolean(PATTERN_STEALTH, false); }
+	public static boolean enableStealthPattern(boolean val) { gPrefs.edit().putBoolean(PATTERN_STEALTH, val).commit(); return val;  }
 	
+	
+	public static int getMaxPatternTry() { return Integer.parseInt(gPrefs.getString(PATTERN_MAX_TRY, "3")); }
+
 	public static boolean isMultiUser() { return gPrefs.getBoolean(MULTI_USER, false); }
 
 	public static void setMultiUserId(int val) { gPrefs.edit().putLong(MULTI_USER_ID, val).commit();}
@@ -216,7 +229,7 @@ public class G extends android.app.Application {
 		Api.applications = null;
 	}
 	
-	public Integer getCurrentProfile(){
+	public static Integer getCurrentProfile(){
 		return storedPosition();
 	}
 
@@ -289,6 +302,47 @@ public class G extends android.app.Application {
 		return count + DEFAULT_PROFILE_COUNT;
 	}
 	
+	public static int getProfilePosition(String profileName){
+		int profilePosition = -1;
+		List<String> profileList = getAdditionalProfiles();
+		for(int i=0; i < profileList.size(); i++) {
+			if(profileName.equals(profileList.get(i))){
+				profilePosition = i + 4;
+			}
+		}
+		return profilePosition;
+	}
+	
+	public static String getProfileName(int position){
+		String profileName  = "";
+		position = position - 4;
+		List<String> profileList = getAdditionalProfiles();
+		for(int i=0; i < profileList.size(); i++) {
+			if(position == i){
+				profileName = profileList.get(i);
+			}
+		}
+		return profileName;
+	}
+	
+	public static String getActiveProfileName(final Context ctx){
+		String profileName = "";
+		if(G.enableMultiProfile()){
+			int pos = getCurrentProfile();
+			if(pos < 4 ) {
+				switch(pos){
+				case 0: profileName = G.gPrefs.getString("default", ctx.getString(R.string.defaultProfile)); break;
+				case 1: profileName = G.gPrefs.getString("profile1", ctx.getString(R.string.profile1));break;
+				case 2: profileName = G.gPrefs.getString("profile2", ctx.getString(R.string.profile2));break;
+				case 3: profileName = G.gPrefs.getString("profile3", ctx.getString(R.string.profile3));break;
+				}
+			} else {
+				profileName = getProfileName(pos);
+			}
+		}
+		return profileName;
+		
+	}
 	public static List<String> getAdditionalProfiles() {
 		String previousProfiles = gPrefs.getString(ADDITIONAL_PROFILES, "");
 		List<String> profileList = new ArrayList<String>();

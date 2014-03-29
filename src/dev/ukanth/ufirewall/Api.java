@@ -36,12 +36,10 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
 import java.io.OutputStreamWriter;
-import java.io.StringReader;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Hashtable;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
@@ -72,6 +70,7 @@ import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
+import android.net.ConnectivityManager;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Build;
@@ -104,7 +103,7 @@ public final class Api {
 	/** special application UID used for dnsmasq DHCP/DNS */
 	public static final int SPECIAL_UID_TETHER	= -12;
 	/** special application UID used for netd DNS proxy */
-	public static final int SPECIAL_UID_DNSPROXY	= -13;
+	//public static final int SPECIAL_UID_DNSPROXY	= -13;
 	/** special application UID used for NTP */
 	public static final int SPECIAL_UID_NTP		= -14;
 	
@@ -172,8 +171,6 @@ public final class Api {
 	public static List<PackageInfoData> applications = null;
 	
 	//for custom scripts
-	static Hashtable<String, LogEntry> logEntriesHash = new Hashtable<String, LogEntry>();
-    static List<LogEntry> logEntriesList = new ArrayList<LogEntry>();
 	public static String ipPath = null;
 	public static String bbPath = null;
 	public static boolean setv6 = false;
@@ -250,12 +247,16 @@ public final class Api {
 		Api.bbPath = getBusyBoxPath(ctx);
 	}
 	
-	static String getBusyBoxPath(Context ctx) {
+	public static String getBusyBoxPath(Context ctx) {
 		if (G.bb_path().equals("system")) {
 			return "busybox ";
 		} else {
 			return ctx.getDir("bin",0).getAbsolutePath() + "/busybox";
 		}
+	}
+	
+	public static String getKLogPath(Context ctx) {
+		return ctx.getDir("bin",0).getAbsolutePath() + "/klogripper ";
 	}
 	
 	static String getNflogPath(Context ctx) {
@@ -327,24 +328,23 @@ public final class Api {
 				}
 			}
 
-			// netd runs as root, and on Android 4.3+ it handles all DNS queries
+			/*// netd runs as root, and on Android 4.3+ it handles all DNS queries
 			if (uids.indexOf(SPECIAL_UID_DNSPROXY) >= 0) {
 				addRuleForUsers(cmds, new String[]{"root"}, "-A " + chain + " -p udp --dport 53",  action);
-			}
+			}*/
 			
-			//TODO: target for next version along with dnsproxy2
-			/*String pref = G.dns_proxy();
+			String pref = G.dns_proxy();
 			if (pref.equals("auto")) {
 				if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
 					addRuleForUsers(cmds, new String[]{"root"}, "-A " + chain + " -p udp --dport 53",  " -j RETURN");
 				} else {
 					addRuleForUsers(cmds, new String[]{"root"}, "-A " + chain + " -p udp --dport 53", " -j " + AFWALL_CHAIN_NAME + "-reject");	
 				}
-			} else if(pref.equals("disabled")){
+			} else if(pref.equals("disable")){
 				addRuleForUsers(cmds, new String[]{"root"}, "-A " + chain + " -p udp --dport 53", " -j " + AFWALL_CHAIN_NAME + "-reject");
 			} else {
 				addRuleForUsers(cmds, new String[]{"root"}, "-A " + chain + " -p udp --dport 53",  " -j RETURN");
-			}*/
+			}
 
 			// NTP service runs as "system" user
 			if (uids.indexOf(SPECIAL_UID_NTP) >= 0) {
@@ -470,7 +470,9 @@ public final class Api {
 		assertBinaries(ctx, showErrors);
 		if(G.isMultiUser()) {
 			//FIXME: after setting this, we need to flush the iptables ?
-			AFWALL_CHAIN_NAME = "afwall" + G.getMultiUserId();
+			if(G.getMultiUserId() > 0) {
+				AFWALL_CHAIN_NAME = "afwall" + G.getMultiUserId();
+			}
 		}			
 		final boolean whitelist = G.pPrefs.getString(PREF_MODE, MODE_WHITELIST).equals(MODE_WHITELIST);
 
@@ -981,96 +983,7 @@ public final class Api {
 		callback.run(ctx, getBusyBoxPath(ctx) + " ifconfig -a");
 	}
 	
-	public static class LogEntry {
-		    String uid;
-		    String src;
-		    String dst;
-		    int len;
-		    int spt;
-		    int dpt;
-		    int packets;
-		    int bytes;
-		    
-		    @Override
-		    public String toString() {
-				return dst + ":" + src+ ":" + len + ":"+ packets;
-		    	
-		    }
-	}
 
-	public static String parseLog(Context ctx, String dmesg) {
-		final BufferedReader r = new BufferedReader(new StringReader(dmesg.toString()));
-		final Integer unknownUID = -99;
-		StringBuilder res = new StringBuilder();
-		String line;
-		int start, end;
-		Integer appid;
-		final SparseArray<LogInfo> map = new SparseArray<LogInfo>();
-		LogInfo loginfo = null;
-
-		try {
-			while ((line = r.readLine()) != null) {
-				if (line.indexOf("{AFL}") == -1) continue;
-				appid = unknownUID;
-				if (((start=line.indexOf("UID=")) != -1) && ((end=line.indexOf(" ", start)) != -1)) {
-					appid = Integer.parseInt(line.substring(start+4, end));
-				}
-				loginfo = map.get(appid);
-				if (loginfo == null) {
-					loginfo = new LogInfo();
-					map.put(appid, loginfo);
-				}
-				loginfo.totalBlocked += 1;
-				if (((start=line.indexOf("DST=")) != -1) && ((end=line.indexOf(" ", start)) != -1)) {
-					String dst = line.substring(start+4, end);
-					if (loginfo.dstBlocked.containsKey(dst)) {
-						loginfo.dstBlocked.put(dst, loginfo.dstBlocked.get(dst) + 1);
-					} else {
-						loginfo.dstBlocked.put(dst, 1);
-					}
-				}
-			}
-			final List<PackageInfoData> apps = getApps(ctx,null);
-			Integer id;
-			String appName = "";
-			int appId = -1;
-			int totalBlocked;
-			for(int i = 0; i < map.size(); i++) {
-				StringBuilder address = new StringBuilder();
-				   id = map.keyAt(i);
-				   if (id != unknownUID) {
-						for (PackageInfoData app : apps) {
-							if (app.uid == id) {
-								appId = id;
-								appName = app.names.get(0);
-								break;
-							}
-						}
-					} else {
-						appName = "Kernel";
-					}
-				   loginfo = map.valueAt(i);
-				   totalBlocked = loginfo.totalBlocked;
-					if (loginfo.dstBlocked.size() > 0) {
-						for (String dst : loginfo.dstBlocked.keySet()) {
-							address.append( dst + "(" + loginfo.dstBlocked.get(dst) + ")");
-							address.append("\n");
-						}
-					}
-					res.append("AppID :\t" +  appId + "\n"  + ctx.getString(R.string.LogAppName) +":\t" + appName + "\n" 
-					+ ctx.getString(R.string.LogPackBlock) + ":\t" +  totalBlocked  + "\n");
-					res.append(address.toString());
-					res.append("\n\t---------\n");
-				}
-		} catch (Exception e) {
-			return null;
-		}
-		if (res.length() == 0) {
-			res.append(ctx.getString(R.string.no_log));
-		}
-		return res.toString();
-	}
-	
     /**
      * @param ctx application context (mandatory)
      * @return a list of applications
@@ -1082,164 +995,123 @@ public final class Api {
 			// return cached instance
 			return applications;
 		}
-		final SharedPreferences defaultPrefs = PreferenceManager.getDefaultSharedPreferences(ctx);
-		final boolean enableVPN = defaultPrefs.getBoolean("enableVPN", false);
-		final boolean enableLAN = defaultPrefs.getBoolean("enableLAN", false);
-		final boolean enableRoam = defaultPrefs.getBoolean("enableRoam", true);
 		
-		final SharedPreferences prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-		
-		final String savedPkg_wifi_uid = prefs.getString(PREF_WIFI_PKG_UIDS, "");
-		final String savedPkg_3g_uid = prefs.getString(PREF_3G_PKG_UIDS, "");
-		final String savedPkg_roam_uid = prefs.getString(PREF_ROAMING_PKG_UIDS, "");
-		final String savedPkg_vpn_uid = prefs.getString(PREF_VPN_PKG_UIDS, "");
-		final String savedPkg_lan_uid = prefs.getString(PREF_LAN_PKG_UIDS, "");
-		
-		// allowed application names separated by pipe '|' (persisted)
-		final String savedPkg_wifi = prefs.getString(PREF_WIFI_PKG, "");
-		final String savedPkg_3g = prefs.getString(PREF_3G_PKG, "");
-		final String savedPkg_roam = prefs.getString(PREF_ROAMING_PKG, "");
-		final String savedPkg_vpn = prefs.getString(PREF_VPN_PKG, "");
-		final String savedPkg_lan = prefs.getString(PREF_LAN_PKG, "");
-		
-		List<Integer> selected_wifi = new ArrayList<Integer>();
-		List<Integer> selected_3g = new ArrayList<Integer>();
-		List<Integer> selected_roam = new ArrayList<Integer>();
-		List<Integer> selected_vpn = new ArrayList<Integer>();
-		List<Integer> selected_lan = new ArrayList<Integer>();
-		
-		
-		if (savedPkg_wifi_uid.equals("")) {
-			selected_wifi = getUidListFromPref(ctx, savedPkg_wifi);
-		} else {
-			selected_wifi = getListFromPref(savedPkg_wifi_uid);
-		}
-
-		if (savedPkg_3g_uid.equals("")) {
-			selected_3g = getUidListFromPref(ctx, savedPkg_3g);
-		} else {
-			selected_3g = getListFromPref(savedPkg_3g_uid);
-		}
-		if (enableRoam) {
-			if (savedPkg_roam_uid.equals("")) {
-				selected_roam = getUidListFromPref(ctx, savedPkg_roam);
-			} else {
-				selected_roam = getListFromPref(savedPkg_roam_uid);
-			}
-		}
-		if (enableVPN) {
-			if (savedPkg_vpn_uid.equals("")) {
-				selected_vpn = getUidListFromPref(ctx, savedPkg_vpn);
-			} else {
-				selected_vpn = getListFromPref(savedPkg_vpn_uid);
-			}
-		}
-		if (enableLAN) {
-			if (savedPkg_lan_uid.equals("")) {
-				selected_lan = getUidListFromPref(ctx, savedPkg_lan);
-			} else {
-				selected_lan = getListFromPref(savedPkg_lan_uid);
-			}
-		}
-		
-		//revert back to old approach
-		
-		//always use the defaul preferences to store cache value - reduces the application usage size
-		final SharedPreferences cachePrefs = ctx.getSharedPreferences("AFWallPrefs", Context.MODE_PRIVATE);
-
-		int count = 0;
-		try {
-			final PackageManager pkgmanager = ctx.getPackageManager();
-			final List<ApplicationInfo> installed = pkgmanager.getInstalledApplications(PackageManager.GET_META_DATA);
-			SparseArray<PackageInfoData> syncMap = new SparseArray<PackageInfoData>();
-			final Editor edit = cachePrefs.edit();
-			boolean changed = false;
-			String name = null;
-			String cachekey = null;
-			final String cacheLabel = "cache.label.";
-			PackageInfoData app = null;
+			final SharedPreferences defaultPrefs = PreferenceManager.getDefaultSharedPreferences(ctx);
+			final boolean enableVPN = defaultPrefs.getBoolean("enableVPN", false);
+			final boolean enableLAN = defaultPrefs.getBoolean("enableLAN", false);
+			final boolean enableRoam = defaultPrefs.getBoolean("enableRoam", true);
 			
-			for (final ApplicationInfo apinfo : installed) {
-				count = count+1;
-				if(appList != null ){
-					appList.doProgress(count);
-				}
-				
-				boolean firstseen = false;
-				app = syncMap.get(apinfo.uid);
-				// filter applications which are not allowed to access the Internet
-				if (app == null && PackageManager.PERMISSION_GRANTED != pkgmanager.checkPermission(Manifest.permission.INTERNET, apinfo.packageName)) {
-					continue;
-				}
-				// try to get the application label from our cache - getApplicationLabel() is horribly slow!!!!
-				cachekey = cacheLabel + apinfo.packageName;
-				name = prefs.getString(cachekey, "");
-				if (name.length() == 0) {
-					// get label and put on cache
-					name = pkgmanager.getApplicationLabel(apinfo).toString();
-					edit.putString(cachekey, name);
-					changed = true;
-					firstseen = true;
-				}
-				if (app == null) {
-					app = new PackageInfoData();
-					app.uid = apinfo.uid;
-					app.names = new ArrayList<String>();
-					app.names.add(name);
-					app.appinfo = apinfo;
-					app.pkgName = apinfo.packageName;
-					syncMap.put(apinfo.uid, app);
+			final SharedPreferences prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+			
+			final String savedPkg_wifi_uid = prefs.getString(PREF_WIFI_PKG_UIDS, "");
+			final String savedPkg_3g_uid = prefs.getString(PREF_3G_PKG_UIDS, "");
+			final String savedPkg_roam_uid = prefs.getString(PREF_ROAMING_PKG_UIDS, "");
+			final String savedPkg_vpn_uid = prefs.getString(PREF_VPN_PKG_UIDS, "");
+			final String savedPkg_lan_uid = prefs.getString(PREF_LAN_PKG_UIDS, "");
+			
+			// allowed application names separated by pipe '|' (persisted)
+			final String savedPkg_wifi = prefs.getString(PREF_WIFI_PKG, "");
+			final String savedPkg_3g = prefs.getString(PREF_3G_PKG, "");
+			final String savedPkg_roam = prefs.getString(PREF_ROAMING_PKG, "");
+			final String savedPkg_vpn = prefs.getString(PREF_VPN_PKG, "");
+			final String savedPkg_lan = prefs.getString(PREF_LAN_PKG, "");
+			
+			List<Integer> selected_wifi = new ArrayList<Integer>();
+			List<Integer> selected_3g = new ArrayList<Integer>();
+			List<Integer> selected_roam = new ArrayList<Integer>();
+			List<Integer> selected_vpn = new ArrayList<Integer>();
+			List<Integer> selected_lan = new ArrayList<Integer>();
+			
+			
+			if (savedPkg_wifi_uid.equals("")) {
+				selected_wifi = getUidListFromPref(ctx, savedPkg_wifi);
+			} else {
+				selected_wifi = getListFromPref(savedPkg_wifi_uid);
+			}
+
+			if (savedPkg_3g_uid.equals("")) {
+				selected_3g = getUidListFromPref(ctx, savedPkg_3g);
+			} else {
+				selected_3g = getListFromPref(savedPkg_3g_uid);
+			}
+			if (enableRoam) {
+				if (savedPkg_roam_uid.equals("")) {
+					selected_roam = getUidListFromPref(ctx, savedPkg_roam);
 				} else {
-					app.names.add(name);
+					selected_roam = getListFromPref(savedPkg_roam_uid);
 				}
-				app.firstseen = firstseen;
-				// check if this application is selected
-				if (!app.selected_wifi && Collections.binarySearch(selected_wifi, app.uid) >= 0) {
-					app.selected_wifi = true;
-				}
-				if (!app.selected_3g && Collections.binarySearch(selected_3g, app.uid) >= 0) {
-					app.selected_3g = true;
-				}
-				if (enableRoam && !app.selected_roam && Collections.binarySearch(selected_roam, app.uid) >= 0) {
-					app.selected_roam = true;
-				}
-				if (enableVPN && !app.selected_vpn && Collections.binarySearch(selected_vpn, app.uid) >= 0) {
-					app.selected_vpn = true;
-				}
-				if (enableLAN && !app.selected_lan && Collections.binarySearch(selected_lan, app.uid) >= 0) {
-					app.selected_lan = true;
-				}
-				
 			}
-			if (changed) {
-				edit.commit();
+			if (enableVPN) {
+				if (savedPkg_vpn_uid.equals("")) {
+					selected_vpn = getUidListFromPref(ctx, savedPkg_vpn);
+				} else {
+					selected_vpn = getListFromPref(savedPkg_vpn_uid);
+				}
 			}
-			/* add special applications to the list */
+			if (enableLAN) {
+				if (savedPkg_lan_uid.equals("")) {
+					selected_lan = getUidListFromPref(ctx, savedPkg_lan);
+				} else {
+					selected_lan = getListFromPref(savedPkg_lan_uid);
+				}
+			}
+			
+			//revert back to old approach
+			
+			//always use the defaul preferences to store cache value - reduces the application usage size
+			final SharedPreferences cachePrefs = ctx.getSharedPreferences("AFWallPrefs", Context.MODE_PRIVATE);
 
-			//initiate special Apps
-			
-			List<PackageInfoData> specialData = new ArrayList<PackageInfoData>();
-			specialData.add(new PackageInfoData(SPECIAL_UID_ANY, ctx.getString(R.string.all_item), "dev.afwall.special.any"));
-			specialData.add(new PackageInfoData(SPECIAL_UID_KERNEL, ctx.getString(R.string.kernel_item), "dev.afwall.special.kernel"));
-			specialData.add(new PackageInfoData(SPECIAL_UID_TETHER, ctx.getString(R.string.tethering_item), "dev.afwall.special.tether"));
-			specialData.add(new PackageInfoData(SPECIAL_UID_DNSPROXY, ctx.getString(R.string.dnsproxy_item), "dev.afwall.special.dnsproxy"));
-			specialData.add(new PackageInfoData(SPECIAL_UID_NTP, ctx.getString(R.string.ntp_item), "dev.afwall.special.ntp"));
-			specialData.add(new PackageInfoData("root", ctx.getString(R.string.root_item), "dev.afwall.special.root"));
-			specialData.add(new PackageInfoData("media", "Media server", "dev.afwall.special.media"));
-			specialData.add(new PackageInfoData("vpn", "VPN networking", "dev.afwall.special.vpn"));
-			specialData.add(new PackageInfoData("shell", "Linux shell", "dev.afwall.special.shell"));
-			specialData.add(new PackageInfoData("gps", "GPS", "dev.afwall.special.gps"));
-			specialData.add(new PackageInfoData("adb", "ADB (Android Debug Bridge)", "dev.afwall.special.adb"));
-			
-			if(specialApps == null) {
-				specialApps = new HashMap<String, Integer>(); 
-			}
-			for (int i=0; i<specialData.size(); i++) {
-				app = specialData.get(i);
-				specialApps.put(app.pkgName, app.uid);
-				//default DNS/NTP
-				if (app.uid != -1 && syncMap.get(app.uid) == null) {
-					// check if this application is allowed
+			int count = 0;
+			try {
+				final PackageManager pkgmanager = ctx.getPackageManager();
+				final List<ApplicationInfo> installed = pkgmanager.getInstalledApplications(PackageManager.GET_META_DATA);
+				SparseArray<PackageInfoData> syncMap = new SparseArray<PackageInfoData>();
+				final Editor edit = cachePrefs.edit();
+				boolean changed = false;
+				String name = null;
+				String cachekey = null;
+				final String cacheLabel = "cache.label.";
+				PackageInfoData app = null;
+				ApplicationInfo apinfo = null;
+				
+				for(int i = 0 ; i < installed.size();  i++) {
+				//for (final ApplicationInfo apinfo : installed) {
+					count = count+1;
+					apinfo = installed.get(i);
+					
+					if(appList != null ){
+						appList.doProgress(count);
+					}
+					
+					boolean firstseen = false;
+					app = syncMap.get(apinfo.uid);
+					// filter applications which are not allowed to access the Internet
+					if (app == null && PackageManager.PERMISSION_GRANTED != pkgmanager.checkPermission(Manifest.permission.INTERNET, apinfo.packageName)) {
+						continue;
+					}
+					// try to get the application label from our cache - getApplicationLabel() is horribly slow!!!!
+					cachekey = cacheLabel + apinfo.packageName;
+					name = prefs.getString(cachekey, "");
+					if (name.length() == 0) {
+						// get label and put on cache
+						name = pkgmanager.getApplicationLabel(apinfo).toString();
+						edit.putString(cachekey, name);
+						changed = true;
+						firstseen = true;
+					}
+					if (app == null) {
+						app = new PackageInfoData();
+						app.uid = apinfo.uid;
+						app.names = new ArrayList<String>();
+						app.names.add(name);
+						app.appinfo = apinfo;
+						app.pkgName = apinfo.packageName;
+						syncMap.put(apinfo.uid, app);
+					} else {
+						app.names.add(name);
+					}
+					app.firstseen = firstseen;
+					// check if this application is selected
 					if (!app.selected_wifi && Collections.binarySearch(selected_wifi, app.uid) >= 0) {
 						app.selected_wifi = true;
 					}
@@ -1255,21 +1127,67 @@ public final class Api {
 					if (enableLAN && !app.selected_lan && Collections.binarySearch(selected_lan, app.uid) >= 0) {
 						app.selected_lan = true;
 					}
-					syncMap.put(app.uid, app);
+					
 				}
-			}
+				if (changed) {
+					edit.commit();
+				}
+				/* add special applications to the list */
 
-			/* convert the map into an array */
-			applications = new ArrayList<PackageInfoData>();
-			for (int i = 0; i < syncMap.size(); i++) {
-				applications.add(syncMap.valueAt(i));
+				//initiate special Apps
+				
+				List<PackageInfoData> specialData = new ArrayList<PackageInfoData>();
+				//specialData.add(new PackageInfoData(SPECIAL_UID_ANY, ctx.getString(R.string.all_item), "dev.afwall.special.any"));
+				specialData.add(new PackageInfoData(SPECIAL_UID_KERNEL, ctx.getString(R.string.kernel_item), "dev.afwall.special.kernel"));
+				specialData.add(new PackageInfoData(SPECIAL_UID_TETHER, ctx.getString(R.string.tethering_item), "dev.afwall.special.tether"));
+				//specialData.add(new PackageInfoData(SPECIAL_UID_DNSPROXY, ctx.getString(R.string.dnsproxy_item), "dev.afwall.special.dnsproxy"));
+				specialData.add(new PackageInfoData(SPECIAL_UID_NTP, ctx.getString(R.string.ntp_item), "dev.afwall.special.ntp"));
+				specialData.add(new PackageInfoData("root", ctx.getString(R.string.root_item), "dev.afwall.special.root"));
+				specialData.add(new PackageInfoData("media", "Media server", "dev.afwall.special.media"));
+				specialData.add(new PackageInfoData("vpn", "VPN networking", "dev.afwall.special.vpn"));
+				specialData.add(new PackageInfoData("shell", "Linux shell", "dev.afwall.special.shell"));
+				specialData.add(new PackageInfoData("gps", "GPS", "dev.afwall.special.gps"));
+				specialData.add(new PackageInfoData("adb", "ADB (Android Debug Bridge)", "dev.afwall.special.adb"));
+				
+				if(specialApps == null) {
+					specialApps = new HashMap<String, Integer>(); 
+				}
+				for (int i=0; i<specialData.size(); i++) {
+					app = specialData.get(i);
+					specialApps.put(app.pkgName, app.uid);
+					//default DNS/NTP
+					if (app.uid != -1 && syncMap.get(app.uid) == null) {
+						// check if this application is allowed
+						if (!app.selected_wifi && Collections.binarySearch(selected_wifi, app.uid) >= 0) {
+							app.selected_wifi = true;
+						}
+						if (!app.selected_3g && Collections.binarySearch(selected_3g, app.uid) >= 0) {
+							app.selected_3g = true;
+						}
+						if (enableRoam && !app.selected_roam && Collections.binarySearch(selected_roam, app.uid) >= 0) {
+							app.selected_roam = true;
+						}
+						if (enableVPN && !app.selected_vpn && Collections.binarySearch(selected_vpn, app.uid) >= 0) {
+							app.selected_vpn = true;
+						}
+						if (enableLAN && !app.selected_lan && Collections.binarySearch(selected_lan, app.uid) >= 0) {
+							app.selected_lan = true;
+						}
+						syncMap.put(app.uid, app);
+					}
+				}
+
+				/* convert the map into an array */
+				applications = new ArrayList<PackageInfoData>();
+				for (int i = 0; i < syncMap.size(); i++) {
+					applications.add(syncMap.valueAt(i));
+				}
+				
+				return applications;
+			} catch (Exception e) {
+				alert(ctx, ctx.getString(R.string.error_common) + e);
 			}
-			
-			return applications;
-		} catch (Exception e) {
-			alert(ctx, ctx.getString(R.string.error_common) + e);
-		}
-		return null;
+			return null;
 	}
 	
 	
@@ -1289,7 +1207,6 @@ public final class Api {
 		}
 		// Sort the array to allow using "Arrays.binarySearch" later
 		Collections.sort(listUids);	
-		
 		return listUids;
 	}
 
@@ -1425,18 +1342,21 @@ public final class Api {
 			ret = installBinary(ctx, R.raw.busybox_x86, "busybox") &&
 					installBinary(ctx, R.raw.iptables_x86, "iptables") &&
 					installBinary(ctx, R.raw.ip6tables_x86, "ip6tables") &&
-					installBinary(ctx, R.raw.nflog_x86, "nflog");
+					installBinary(ctx, R.raw.nflog_x86, "nflog") &&
+					installBinary(ctx, R.raw.klogripper_x86,"klogripper");
 		} else if (abi.startsWith("mips")) {
 			ret = installBinary(ctx, R.raw.busybox_mips, "busybox") &&
 					  installBinary(ctx, R.raw.iptables_mips, "iptables") &&
 					  installBinary(ctx, R.raw.ip6tables_mips, "ip6tables") &&
-					  installBinary(ctx, R.raw.nflog_mips, "nflog");
+					  installBinary(ctx, R.raw.nflog_mips, "nflog") &&
+					  installBinary(ctx, R.raw.klogripper_mips,"klogripper");
 		} else {
 			// default to ARM
 			ret = installBinary(ctx, R.raw.busybox_arm, "busybox") &&
 					  installBinary(ctx, R.raw.iptables_arm, "iptables") &&
 					  installBinary(ctx, R.raw.ip6tables_arm, "ip6tables") &&
-					  installBinary(ctx, R.raw.nflog_arm, "nflog");
+					  installBinary(ctx, R.raw.nflog_arm, "nflog") &&
+					  installBinary(ctx, R.raw.klogripper_arm,"klogripper");
 		}
 
 		// arch-independent scripts
@@ -1519,7 +1439,6 @@ public final class Api {
 		while (tok.hasMoreTokens()) {
 			final String token = tok.nextToken();
 			if (uid_str.equals(token)) {
-				//Log.d(TAG, "Removing UID " + token + " from the rules list (package removed)!");
 				changed = true;
 			} else {
 				if (newuids.length() > 0)
@@ -1544,7 +1463,6 @@ public final class Api {
 		String name = prefs.getString(cacheKey, "");
 		if (name.length() > 0) {
 			prefs.edit().remove(cacheKey).commit();
-			//Api.alert(ctx, "Cleaned application cache!");
 		}
 	}
 	
@@ -1644,9 +1562,9 @@ public final class Api {
      */
 	public static final class PackageInfoData {
 		/** linux user id */
-    	int uid;
+    	public int uid;
     	/** application names belonging to this user id */
-    	List<String> names;
+    	public List<String> names;
     	/** rules saving & load **/
     	String pkgName; 
     	/** indicates if this application is selected for wifi */
@@ -1715,31 +1633,6 @@ public final class Api {
     	}
     	
     }
-    /**
-     * Small internal structure used to hold log information
-     */
-	private static final class LogInfo {
-		private int totalBlocked; // Total number of packets blocked
-		private HashMap<String, Integer> dstBlocked; // Number of packets blocked per destination IP address
-		private LogInfo() {
-			this.dstBlocked = new HashMap<String, Integer>();
-		}
-	}
-	
-	/*public static String runSUCommand(String cmd) throws IOException {
-		final StringBuilder res = new StringBuilder();
-		Process p  = Runtime.getRuntime().exec(
-				new String[] { "su", "-c", cmd });
-		BufferedReader stdout = new BufferedReader(new InputStreamReader(p.getInputStream()));
-		String tmp;
-		while ((tmp = stdout.readLine()) != null) {
-			res.append(tmp);
-			res.append(",");
-		}
-		// use inputLine.toString(); here it would have whole source
-		stdout.close();
-		return res.toString();
-	}*/
 	
 	public static void saveSharedPreferencesToFileConfirm(final Context ctx) {
 		AlertDialog.Builder builder = new AlertDialog.Builder(ctx);
@@ -2174,10 +2067,10 @@ public final class Api {
 	private static void initSpecial() {
 		if(specialApps == null || specialApps.size() == 0){
 			specialApps = new HashMap<String, Integer>();
-			specialApps.put("dev.afwall.special.any",SPECIAL_UID_ANY);
+			//specialApps.put("dev.afwall.special.any",SPECIAL_UID_ANY);
 			specialApps.put("dev.afwall.special.kernel",SPECIAL_UID_KERNEL);
 			specialApps.put("dev.afwall.special.tether",SPECIAL_UID_TETHER);
-			specialApps.put("dev.afwall.special.dnsproxy",SPECIAL_UID_DNSPROXY);
+			//specialApps.put("dev.afwall.special.dnsproxy",SPECIAL_UID_DNSPROXY);
 			specialApps.put("dev.afwall.special.ntp",SPECIAL_UID_NTP);
 			specialApps.put("dev.afwall.special.root",android.os.Process.getUidForName("root"));
 			specialApps.put("dev.afwall.special.media",android.os.Process.getUidForName("media"));
@@ -2217,11 +2110,6 @@ public final class Api {
 	public static void updateLanguage(Context context, String lang) {
 	    if (!"".equals(lang)) {
 	        Locale locale = new Locale(lang);
-	       /* Locale.setDefault(locale);
-	        Configuration config = new Configuration();
-	        config.locale = locale;
-	        context.getResources().updateConfiguration(config, null);*/
-	        
 	        Resources res = context.getResources();
 			DisplayMetrics dm = res.getDisplayMetrics();
 			Configuration conf = res.getConfiguration();
@@ -2326,6 +2214,16 @@ public final class Api {
 		}
 		return false;
 	}
+	
 
-
+    public static boolean isMobileNetworkSupported(final Context ctx) {
+    	boolean hasMobileData = true;
+    	ConnectivityManager cm = (ConnectivityManager)ctx.getSystemService(ctx.CONNECTIVITY_SERVICE);
+    	if (cm != null) {
+    		if (cm.getNetworkInfo(ConnectivityManager.TYPE_MOBILE) == null) {
+    			hasMobileData = false;
+    		}
+		} 
+		return hasMobileData;
+    }
 }
