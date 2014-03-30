@@ -4,6 +4,10 @@ Changelog AFWall+
 -------------
 Download links are right here on the ["Downloads" front page](https://github.com/ukanth/afwall/downloads).
 
+Version 1.3.0.1
+* Old toggle widget is back - Hate you guys :)
+* "Allow All Application" option is back - Again hate you guys :)
+
 Version 1.3.0
 
 * New Widget with support for multiple profiles (single widget)
