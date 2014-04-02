@@ -334,16 +334,25 @@ public final class Api {
 			}*/
 			
 			String pref = G.dns_proxy();
-			if (pref.equals("auto")) {
-				if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
-					addRuleForUsers(cmds, new String[]{"root"}, "-A " + chain + " -p udp --dport 53",  " -j RETURN");
+			
+			if(whitelist) {
+				if (pref.equals("auto")) {
+					if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
+						addRuleForUsers(cmds, new String[]{"root"}, "-A " + chain + " -p udp --dport 53",  " -j RETURN");
+					} else {
+						addRuleForUsers(cmds, new String[]{"root"}, "-A " + chain + " -p udp --dport 53", " -j " + AFWALL_CHAIN_NAME + "-reject");	
+					}
+				} else if(pref.equals("disable")){
+					addRuleForUsers(cmds, new String[]{"root"}, "-A " + chain + " -p udp --dport 53", " -j " + AFWALL_CHAIN_NAME + "-reject");
 				} else {
-					addRuleForUsers(cmds, new String[]{"root"}, "-A " + chain + " -p udp --dport 53", " -j " + AFWALL_CHAIN_NAME + "-reject");	
+					addRuleForUsers(cmds, new String[]{"root"}, "-A " + chain + " -p udp --dport 53",  " -j RETURN");
 				}
-			} else if(pref.equals("disable")){
-				addRuleForUsers(cmds, new String[]{"root"}, "-A " + chain + " -p udp --dport 53", " -j " + AFWALL_CHAIN_NAME + "-reject");
 			} else {
-				addRuleForUsers(cmds, new String[]{"root"}, "-A " + chain + " -p udp --dport 53",  " -j RETURN");
+				if(pref.equals("disable")){
+					addRuleForUsers(cmds, new String[]{"root"}, "-A " + chain + " -p udp --dport 53", " -j " + AFWALL_CHAIN_NAME + "-reject");
+				} else if (pref.equals("enable")) {
+					addRuleForUsers(cmds, new String[]{"root"}, "-A " + chain + " -p udp --dport 53",  " -j RETURN");
+				}
 			}
 
 			// NTP service runs as "system" user
@@ -1137,7 +1146,7 @@ public final class Api {
 				//initiate special Apps
 				
 				List<PackageInfoData> specialData = new ArrayList<PackageInfoData>();
-				//specialData.add(new PackageInfoData(SPECIAL_UID_ANY, ctx.getString(R.string.all_item), "dev.afwall.special.any"));
+				specialData.add(new PackageInfoData(SPECIAL_UID_ANY, ctx.getString(R.string.all_item), "dev.afwall.special.any"));
 				specialData.add(new PackageInfoData(SPECIAL_UID_KERNEL, ctx.getString(R.string.kernel_item), "dev.afwall.special.kernel"));
 				specialData.add(new PackageInfoData(SPECIAL_UID_TETHER, ctx.getString(R.string.tethering_item), "dev.afwall.special.tether"));
 				//specialData.add(new PackageInfoData(SPECIAL_UID_DNSPROXY, ctx.getString(R.string.dnsproxy_item), "dev.afwall.special.dnsproxy"));
@@ -2067,7 +2076,7 @@ public final class Api {
 	private static void initSpecial() {
 		if(specialApps == null || specialApps.size() == 0){
 			specialApps = new HashMap<String, Integer>();
-			//specialApps.put("dev.afwall.special.any",SPECIAL_UID_ANY);
+			specialApps.put("dev.afwall.special.any",SPECIAL_UID_ANY);
 			specialApps.put("dev.afwall.special.kernel",SPECIAL_UID_KERNEL);
 			specialApps.put("dev.afwall.special.tether",SPECIAL_UID_TETHER);
 			//specialApps.put("dev.afwall.special.dnsproxy",SPECIAL_UID_DNSPROXY);
@@ -2081,7 +2090,7 @@ public final class Api {
 		}
 	}
 	
-	public static void sendNotification(Context context,String title, String message) {
+	/*public static void sendNotification(Context context,String title, String message) {
 
 		NotificationManager mNotificationManager = (NotificationManager) context
 				.getSystemService(Context.NOTIFICATION_SERVICE);
@@ -2105,7 +2114,7 @@ public final class Api {
 		
 		mNotificationManager.notify(HELLO_ID, builder.build());
 
-	}
+	}*/
 	
 	public static void updateLanguage(Context context, String lang) {
 	    if (!"".equals(lang)) {
